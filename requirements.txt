@@ -1,0 +1,5 @@
+#pip install -r requirements.txt
+alpaca-py 
+pandas
+python-dotenv
+pytz
