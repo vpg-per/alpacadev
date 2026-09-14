@@ -21,13 +21,8 @@ class AlertManager:
         self.chat_id = os.getenv("TELE_CHAT_ID")
 
     def send_chart_alert(self, s_message):
-        # url = f"https://api.telegram.org/bot{self.token}/sendMessage?chat_id={self.chat_id}&text={s_message}"
-        # return requests.get(url).json()
-        url = f"https://api.telegram.org/bot{self.token}/sendMessage"
-        params = {"chat_id": self.chat_id, "text": s_message, "parse_mode": "HTML"}
-        resp = requests.get(url, params=params, timeout=30)
-        resp.raise_for_status()
-        return resp.json()
+        url = f"https://api.telegram.org/bot{self.token}/sendMessage?chat_id={self.chat_id}&text={s_message}"
+        return requests.get(url).json()
     
     def send_photo_alert(self, image_buffer: io.BytesIO,filename:     str = "sp.png", set_title = ""):
         image_buffer.seek(0)
