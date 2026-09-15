@@ -36,8 +36,8 @@ jobs:
     # Fixed: Corrected alignment for 'env:'. It must sit exactly flush under the target step execution block.
     - name: Run Candle analysis
       env:
-        USER_ID: ${{ vars.TELE_CHAT_ID }}
-        USER_SECRET: ${{ vars.TELE_TOKEN }}
+        TELE_CHAT_ID: ${{ vars.TELE_CHAT_ID }}
+        TELE_TOKEN: ${{ vars.TELE_TOKEN }}
         DATABASE_URL: ${{ vars.DATABASE_URL }}
         ALA_API_KEY: ${{ vars.ALA_API_KEY }}
         ALA_SECRET_KEY: ${{ vars.ALA_SECRET_KEY }}
