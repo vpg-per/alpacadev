@@ -7,7 +7,7 @@ import argparse
 from alaDataManager import fetch_stock_data
 from dataAnalyzer import ServiceManager
 from alertManager import AlertManager
-
+from datetime import datetime
 
 def define_input_symbols():
     parser = argparse.ArgumentParser(description="Process multiple stock symbols.")
@@ -28,11 +28,14 @@ def main():
         row5m, row15m  = objMgr.analyze_stockdata(sym)
 
         if row5m is not None:
-            msg = f"5m Bias just changed: {row5m['PreviousBias']} -> {row5m['OverallBias']} at {row5m.name}, 15m bias is {row15m['OverallBias']}"
+            row5mdt = datetime.fromisoformat(row5m.name)
+            hour = row5mdt.hour
+            minute = row5mdt.minute
+            msg = f"{row5m["symbol"]} 5m Bias changed({hour}:{minute}) to {row5m['OverallBias']}, close price is {row5m.close}, 15m bias is {row15m['OverallBias']}"
             print(msg)
             alertMgr.send_chart_alert(msg)
         else:
-            print("No bias change on the latest bar.")
+            print(f"No bias change for {sym} stock on the latest bar.")
 
     # combined = fetch_stock_data(symbol, "5min")
     # print(f"--- {symbol} ---")

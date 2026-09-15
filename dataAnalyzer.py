@@ -30,7 +30,7 @@ class ServiceManager:
 
         if not self.data5m.empty:
             print(f"[{symbol} 5m] Bias change alerts:")
-            print(self.data5m.tail(25))
+            print(self.data5m.tail(10))
             true_rows = self.data5m[self.data5m['BiasChanged'] == True]
             last_true_row = true_rows.iloc[-1]
             print(last_true_row)

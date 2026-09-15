@@ -230,10 +230,10 @@ def fetch_combined(
     combined["symbol"]=symbol    
     combined = round_ohlc(combined)
 
-    # Alpaca feeds can lag; patch in the freshest ~30 min from Yahoo
-    # Finance (pre/regular/post market only -- no overnight coverage there).
-    combined = append_recent_yahoo_data(combined, symbol)
-    combined = drop_incomplete_last_candle(combined, "5min")
+    now_eastern = config.EASTERN.localize(datetime.now())
+    if now_eastern.hour >= 4 and now_eastern.hour <= 20:
+        combined = append_recent_yahoo_data(combined, symbol)
+        combined = drop_incomplete_last_candle(combined, "5min")
     
     return combined
 
