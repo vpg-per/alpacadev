@@ -3,3 +3,5 @@ alpaca-py
 pandas
 python-dotenv
 pytz
+matplotlib
+psycopg2

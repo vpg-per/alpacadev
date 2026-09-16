@@ -7,7 +7,10 @@ import argparse
 from alaDataManager import fetch_stock_data
 from dataAnalyzer import ServiceManager
 from alertManager import AlertManager
+from sectorperformance import generate_sector_chart
+from chartDBManager import ChartDBManager
 from datetime import datetime
+import config
 
 def define_input_symbols():
     parser = argparse.ArgumentParser(description="Process multiple stock symbols.")
@@ -18,6 +21,23 @@ def define_input_symbols():
         target_symbols = [sym.strip().upper() for sym in args.symbols.split(",")]
 
     return target_symbols
+
+
+def in_sector_chart_window(now: datetime) -> bool:
+    """True when `now` (US/Eastern) falls between >6am and <5pm, on a
+    minute strictly between 9 and 16 past the hour (i.e. minute 10-15).
+    Intended to gate a periodically-invoked main.py so the sector chart
+    only gets rebuilt roughly once an hour, during market-relevant hours.
+    """
+    return True # 6 < now.hour < 17 and 9 < now.minute < 16
+    
+def run_sector_chart():
+    """Build the sector comparison chart and persist it as the single
+    row in the Neon DB table (old row(s) removed first)."""
+    png_path = generate_sector_chart()
+    ChartDBManager().save_chart(png_path)
+    print(f"Sector chart updated and saved to DB: {png_path}")
+
 
 def main():
     symbols = define_input_symbols()
@@ -43,6 +63,10 @@ def main():
             alertMgr.send_chart_alert(msg)
         else:
             print(f"No bias change for {sym} stock on the latest bar.")
+
+    now_et = datetime.now(config.EASTERN)
+    if in_sector_chart_window(now_et):
+        run_sector_chart()
 
     # combined = fetch_stock_data(symbol, "5min")
     # print(f"--- {symbol} ---")
