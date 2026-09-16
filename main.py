@@ -31,7 +31,7 @@ def main():
             row5mdt = datetime.fromisoformat(row5m.name)
             hour = row5mdt.hour
             minute = row5mdt.minute
-            msg = f"{row5m["symbol"]} 5m Bias changed({hour}:{minute}) to {row5m['OverallBias']}, close price is {row5m.close}, 15m bias is {row15m['OverallBias']}"
+            msg = f"{row5m['symbol']} 5m Bias changed({hour}:{minute}) to {row5m['OverallBias']}, close price is {row5m.close}, 15m bias is {row15m['OverallBias']}"
             print(msg)
             alertMgr.send_chart_alert(msg)
         else:
