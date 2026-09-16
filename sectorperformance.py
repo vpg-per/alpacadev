@@ -108,7 +108,7 @@ def generate_sector_chart(output_path: str = "sectors_5min.png") -> str:
     close_t = midnight.replace(hour=16, minute=0)
 
     fig = plt.figure(figsize=(15.5, 7.5), facecolor="white")
-    gs = gridspec.GridSpec(1, 2, width_ratios=[2.15, 1.05], wspace=0.55, figure=fig)
+    gs = gridspec.GridSpec(1, 2, width_ratios=[2.97, 0.68], wspace=0.15, figure=fig)
     ax = fig.add_subplot(gs[0])
     ax_table = fig.add_subplot(gs[1])
     ax.set_facecolor("white")
@@ -284,7 +284,7 @@ def generate_sector_chart(output_path: str = "sectors_5min.png") -> str:
                 pct_str = f"{arrow} {pct:+.2f}%"
             ax_table.text(0.04, y, sym, transform=ax_table.transAxes, fontsize=9.5,
                           fontweight="bold", color=color, va="top")
-            ax_table.text(0.16, y, name, transform=ax_table.transAxes, fontsize=9,
+            ax_table.text(0.20, y, name, transform=ax_table.transAxes, fontsize=9,
                           color="#333333", va="top")
             ax_table.text(0.98, y, pct_str, transform=ax_table.transAxes, fontsize=9.5,
                           fontweight="bold", color=pct_color, va="top", ha="right")
@@ -294,13 +294,13 @@ def generate_sector_chart(output_path: str = "sectors_5min.png") -> str:
         spine.set_visible(False)
 
     fig.subplots_adjust(left=0.05, right=0.97, top=0.90, bottom=0.08)
-    fig.savefig(output_path, dpi=150)
+    fig.savefig(output_path, dpi=75)
     plt.close(fig)
 
     return output_path
 
 
-# if __name__ == "__main__":
-#     # Allows `python sectorperformance.py` to still generate a chart
-#     # directly, same as the old top-level-script behavior.
-#     generate_sector_chart()
+if __name__ == "__main__":
+    # Allows `python sectorperformance.py` to still generate a chart
+    # directly, same as the old top-level-script behavior.
+    generate_sector_chart()
