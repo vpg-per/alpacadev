@@ -3,8 +3,14 @@ name: Run analysis
 on:
   push:
     branches: [ "main" ]
-  workflow_dispatch: 
-  
+  workflow_dispatch:
+    inputs:
+      run_sector_chart:
+        description: "If true, only (re)build and persist the sector chart (calls run_sector_chart()) instead of the normal symbol bias analysis."
+        required: false
+        default: false
+        type: boolean
+
   # schedule:
     # Changed from a step-increment slash to an explicit comma-separated minute list.
     # This prevents the GitHub Actions runner engine from skipping the high-frequency trigger.
@@ -36,9 +42,20 @@ jobs:
     # Fixed: Corrected alignment for 'env:'. It must sit exactly flush under the target step execution block.
     - name: Run Candle analysis
       env:
-        TELE_CHAT_ID: ${{ vars.TELE_CHAT_ID }}
-        TELE_TOKEN: ${{ vars.TELE_TOKEN }}
+        USER_ID: ${{ vars.TELE_CHAT_ID }}
+        USER_SECRET: ${{ vars.TELE_TOKEN }}
         DATABASE_URL: ${{ vars.DATABASE_URL }}
         ALA_API_KEY: ${{ vars.ALA_API_KEY }}
         ALA_SECRET_KEY: ${{ vars.ALA_SECRET_KEY }}
-      run: python main.py ${{ vars.CUSTOM_ALERT_SYMBOLS }}
+        RUN_SECTOR_CHART: ${{ github.event.inputs.run_sector_chart }}
+      # When the run_sector_chart workflow_dispatch input is provided as
+      # "true", skip the normal per-symbol run and just call
+      # run_sector_chart() (via `python main.py --sector-chart`).
+      # On push/schedule triggers the input is unset, so this always
+      # falls through to the normal analysis run.
+      run: |
+        if [ "$RUN_SECTOR_CHART" = "true" ]; then
+          python main.py --sector-chart
+        else
+          python main.py ${{ vars.CUSTOM_ALERT_SYMBOLS }}
+        fi
