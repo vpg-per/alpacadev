@@ -43,9 +43,19 @@ UP_COLOR = "#1a9850"
 DOWN_COLOR = "#d73027"
 FLAT_COLOR = "#999999"
 
+
+def _contrast_text_color(hex_color: str) -> str:
+    """Pick white or black text for readability on top of `hex_color`,
+    based on standard relative-luminance thresholding."""
+    hex_color = hex_color.lstrip("#")
+    r, g, b = (int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
+    luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+    return "#000000" if luminance > 0.6 else "#ffffff"
+
 SMOOTH_BARS = 3          # rolling-mean window; set to 1 to disable smoothing
-MIN_LABEL_GAP_FRAC = 0.018  # min vertical gap between labels, as a fraction
-                            # of the y-axis range (tune for your font size)
+LABEL_GAP_PAD_FACTOR = 1.25  # extra breathing room multiplier applied on top
+                              # of the measured label height (see min_gap calc
+                              # in generate_sector_chart)
 
 # ---- risk-on / risk-off sector groupings for the side panel ----
 RISK_ON = ["XLK", "XLI", "XLY"]
@@ -99,13 +109,42 @@ def generate_sector_chart(output_path: str = "sectors_5min.png") -> str:
     midnight = now_et.replace(hour=0, minute=0, second=0, microsecond=0)
     config.LOOKBACK_DAYS = (now_et - midnight).days + 1
 
-    # ---- but the chart itself is DISPLAYED from 5am to 5pm ET ----
-    # (4-5am and 5-8pm have too little data to be worth showing)
+    # ---- the chart window is capped to 5am-5pm ET, but only extends as
+    # far as data actually exists ----
+    # (4-5am and 5-8pm have too little data to be worth showing, and
+    # reserving empty space all the way to 5pm when e.g. only data up to
+    # 2pm exists just wastes horizontal space / squishes the real lines)
     display_start = midnight.replace(hour=5, minute=0)
-    display_end = midnight.replace(hour=17, minute=0)
+    max_display_end = midnight.replace(hour=17, minute=0)
 
     open_t = midnight.replace(hour=9, minute=30)
     close_t = midnight.replace(hour=16, minute=0)
+
+    # ---- pre-fetch every sector's data up front so we know how far the
+    # latest available bar reaches before deciding where the x-axis ends ----
+    fetched = {}
+    latest_data_ts = None
+    for sym in SECTORS:
+        full_df = dm.fetch_stock_data(sym, "5min")
+        fetched[sym] = full_df
+        if full_df is not None and not full_df.empty:
+            df_in_window = full_df[(full_df.index >= display_start) & (full_df.index <= max_display_end)]
+            if not df_in_window.empty:
+                ts = df_in_window.index[-1]
+                if latest_data_ts is None or ts > latest_data_ts:
+                    latest_data_ts = ts
+
+    if latest_data_ts is not None:
+        # small right-hand pad so the last point / end-of-line labels
+        # aren't jammed right against the axis edge
+        pad = (latest_data_ts - display_start) * 0.03
+        display_end = min(latest_data_ts + pad, max_display_end)
+        if display_end <= open_t:
+            # too little of the trading day has data yet to make a
+            # sensible dynamic window -- fall back to the full span
+            display_end = max_display_end
+    else:
+        display_end = max_display_end
 
     fig = plt.figure(figsize=(15.5, 7.5), facecolor="white")
     gs = gridspec.GridSpec(1, 2, width_ratios=[2.97, 0.68], wspace=0.15, figure=fig)
@@ -115,7 +154,8 @@ def generate_sector_chart(output_path: str = "sectors_5min.png") -> str:
 
     # ---- shade pre-market / regular / after-hours ----
     ax.axvspan(display_start, open_t, color="#f2f2f2", zorder=0)
-    ax.axvspan(close_t, display_end, color="#f2f2f2", zorder=0)
+    if display_end > close_t:
+        ax.axvspan(close_t, display_end, color="#f2f2f2", zorder=0)
     ax.set_xlim(display_start, display_end)
 
     # ---- baseline at 100 ----
@@ -127,13 +167,14 @@ def generate_sector_chart(output_path: str = "sectors_5min.png") -> str:
 
     for sym in SECTORS:
         color = SECTOR_COLORS[sym]
-        full_df = dm.fetch_stock_data(sym, "5min")
+        full_df = fetched[sym]
 
         table_stats[sym] = _pct_change_since_prev_close(full_df, midnight)
 
         # data is fetched from midnight as before; only the DISPLAYED slice
-        # (and the rebase-to-100 anchor) starts at 5am.
-        df = full_df[full_df.index >= display_start] if full_df is not None else full_df
+        # (and the rebase-to-100 anchor) runs from 5am to the dynamic
+        # display_end computed above.
+        df = full_df[(full_df.index >= display_start) & (full_df.index <= display_end)] if full_df is not None else full_df
         if df is None or df.empty:
             continue
         norm = df["close"] / df["close"].iloc[0] * 100
@@ -145,7 +186,7 @@ def generate_sector_chart(output_path: str = "sectors_5min.png") -> str:
 
         ax.plot(df.index, plot_norm, color=color, lw=1.2, alpha=1.0, zorder=2)
 
-        series_data.append((sym, color, df.index[-1], plot_norm.iloc[-1]))
+        series_data.append((sym, color, df.index[-1], plot_norm.iloc[-1], table_stats[sym][1]))
         all_plot_values.extend(plot_norm.dropna().tolist())
 
     # XLV isn't charted (dropped to reduce clutter) but is still needed to
@@ -153,7 +194,7 @@ def generate_sector_chart(output_path: str = "sectors_5min.png") -> str:
     table_stats["XLV"] = _pct_change_since_prev_close(dm.fetch_stock_data("XLV", "5min"), midnight)
 
     # ---- de-overlap end-of-line labels ----
-    series_data.sort(key=lambda t: t[3])  # ascending by last value
+    series_data.sort(key=lambda t: t[3])  # ascending by last plotted value
     y_min, y_max = None, None
     if all_plot_values:
         # Base the axis range on the full extent of every plotted line (not
@@ -164,20 +205,54 @@ def generate_sector_chart(output_path: str = "sectors_5min.png") -> str:
         y_min, y_max = data_min - pad, data_max + pad
         ax.set_ylim(y_min, y_max)
 
-    min_gap = (y_max - y_min) * MIN_LABEL_GAP_FRAC if series_data else 0
-    label_ys = []
-    for sym, color, x_last, y_last in series_data:
-        y_label = y_last
-        if label_ys and (y_label - label_ys[-1]) < min_gap:
-            y_label = label_ys[-1] + min_gap
-        label_ys.append(y_label)
+    min_gap = 0
+    if series_data:
+        # Measure the *actual* rendered label height in pixels (fontsize +
+        # bbox padding) instead of using a fixed fraction of the data range.
+        # A fixed fraction only happens to be "enough" for some combinations
+        # of data range / figure size / dpi -- when the plotted values are
+        # tightly clustered (a quiet market) the same fraction maps to far
+        # fewer pixels than the label actually needs, so badges still
+        # collide. Measuring in pixels and converting back to data units
+        # makes the gap correct regardless of how much the sectors moved.
+        fig.canvas.draw()  # need a renderer + finalized axes position first
+        renderer = fig.canvas.get_renderer()
+        ax_bbox_px = ax.get_window_extent(renderer=renderer)
+        pixels_per_data_unit = ax_bbox_px.height / (y_max - y_min)
 
-    for (sym, color, x_last, y_last), y_label in zip(series_data, label_ys):
-        ax.annotate(f"{sym} {y_last:.1f}",
+        label_fontsize_pt = 8.5
+        # line height (~1.4x fontsize is typical for a single line of bold
+        # text) plus the bbox's own padding (pad=0.3 * fontsize, top+bottom)
+        label_height_pt = label_fontsize_pt * 1.4 + (0.3 * label_fontsize_pt * 2)
+        label_height_px = label_height_pt * fig.dpi / 72.0
+        # extra breathing room so badges aren't touching edge-to-edge
+        min_gap = (label_height_px / pixels_per_data_unit) * LABEL_GAP_PAD_FACTOR
+
+    label_ys = [y_last for *_, y_last, _ in series_data]
+    # Pass 1 (ascending): push each label up if it's too close to the one
+    # below it, guaranteeing no overlap looking upward.
+    for i in range(1, len(label_ys)):
+        if label_ys[i] - label_ys[i - 1] < min_gap:
+            label_ys[i] = label_ys[i - 1] + min_gap
+    # Pass 2 (descending): pull labels back down where possible, so a dense
+    # cluster near the bottom doesn't drag the *entire* stack upward and
+    # leave it drifted far from the actual data -- without this, only
+    # upward pushes accumulate and labels for sectors near the top of the
+    # range can end up needlessly far above their true value.
+    for i in range(len(label_ys) - 2, -1, -1):
+        if label_ys[i + 1] - label_ys[i] < min_gap:
+            label_ys[i] = label_ys[i + 1] - min_gap
+
+    for (sym, color, x_last, y_last, pct_last), y_label in zip(series_data, label_ys):
+        pct_text = f"{pct_last:+.2f}%" if pct_last is not None else "N/A"
+        text_color = _contrast_text_color(color)
+        ax.annotate(f"{sym} {pct_text}",
                     xy=(1.005, y_label),
                     xycoords=("axes fraction", "data"),
-                    color=color, fontsize=8.5, va="center", clip_on=False,
-                    fontweight="bold")
+                    color=text_color, fontsize=8.5, va="center", ha="left", clip_on=False,
+                    fontweight="bold",
+                    bbox=dict(boxstyle="round,pad=0.3,rounding_size=0.35",
+                              facecolor=color, edgecolor="none"))
         # leader line from the true data point to the (possibly shifted) label
         if abs(y_label - y_last) > min_gap * 0.3:
             x_last_num = mdates.date2num(x_last)   # match get_xlim()'s float date-space
@@ -188,10 +263,15 @@ def generate_sector_chart(output_path: str = "sectors_5min.png") -> str:
     ax.grid(True, color="#e2e2e2", lw=0.6, zorder=0)
     ax.set_axisbelow(True)
     ax.tick_params(colors=BLUE_LBL, labelsize=9)
-    for lbl in ax.get_xticklabels() + ax.get_yticklabels():
+    for lbl in ax.get_xticklabels():
         lbl.set_fontweight("bold")
     ax.yaxis.tick_right()
     ax.yaxis.set_label_position("right")
+    # y-axis numeric labels removed: the colored sector badges at the end
+    # of each line already carry the info that mattered here, and dropping
+    # the tick labels avoids them cluttering/overlapping the badges.
+    ax.set_yticklabels([])
+    ax.tick_params(axis="y", length=0)
     ax.spines["top"].set_visible(False)
     ax.spines["left"].set_visible(False)
     ax.spines["right"].set_color("#d9d9d9")

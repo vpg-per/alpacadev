@@ -15,12 +15,20 @@ import config
 def define_input_symbols():
     parser = argparse.ArgumentParser(description="Process multiple stock symbols.")
     parser.add_argument("symbols", type=str, nargs="?", help="Comma-separated stock symbols")
+    parser.add_argument(
+        "--sector-chart",
+        dest="sector_chart",
+        action="store_true",
+        help="If set, only (re)build and persist the sector comparison chart, "
+             "skipping the per-symbol bias analysis. Intended to be driven by "
+             "the run_sector_chart workflow_dispatch input in run_analysis.yaml.",
+    )
     args = parser.parse_args()
     target_symbols = ["SPY"]
-    if len(sys.argv) >= 2:
+    if args.symbols:
         target_symbols = [sym.strip().upper() for sym in args.symbols.split(",")]
 
-    return target_symbols
+    return target_symbols, args.sector_chart
 
 
 def in_sector_chart_window(now: datetime) -> bool:
@@ -29,7 +37,7 @@ def in_sector_chart_window(now: datetime) -> bool:
     Intended to gate a periodically-invoked main.py so the sector chart
     only gets rebuilt roughly once an hour, during market-relevant hours.
     """
-    return 6 < now.hour < 17 and 9 < now.minute < 16
+    return  True    #    6 < now.hour < 17 and 9 < now.minute < 16
     
 def run_sector_chart():
     """Build the sector comparison chart and persist it as the single
@@ -40,7 +48,14 @@ def run_sector_chart():
 
 
 def main():
-    symbols = define_input_symbols()
+    symbols, sector_chart_only = define_input_symbols()
+
+    if sector_chart_only:
+        # Explicit --sector-chart flag (wired up from the run_sector_chart
+        # workflow_dispatch input): just build/persist the chart and stop,
+        # skipping the per-symbol bias analysis below.
+        run_sector_chart()
+        return
 
     objMgr = ServiceManager()
     alertMgr = AlertManager()
