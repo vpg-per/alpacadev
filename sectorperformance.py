@@ -114,7 +114,7 @@ def generate_sector_chart(output_path: str = "sectors_5min.png") -> str:
     # (4-5am and 5-8pm have too little data to be worth showing, and
     # reserving empty space all the way to 5pm when e.g. only data up to
     # 2pm exists just wastes horizontal space / squishes the real lines)
-    display_start = midnight.replace(hour=5, minute=0)
+    display_start = midnight.replace(hour=6, minute=0)
     max_display_end = midnight.replace(hour=17, minute=0)
 
     open_t = midnight.replace(hour=9, minute=30)
