@@ -37,7 +37,7 @@ def in_sector_chart_window(now: datetime) -> bool:
     Intended to gate a periodically-invoked main.py so the sector chart
     only gets rebuilt roughly once an hour, during market-relevant hours.
     """
-    return  True    #    6 < now.hour < 17 and 9 < now.minute < 16
+    return  6 < now.hour < 17 and 9 < now.minute < 16
     
 def run_sector_chart():
     """Build the sector comparison chart and persist it as the single
