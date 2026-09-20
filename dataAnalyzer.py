@@ -20,6 +20,9 @@ class ServiceManager:
         self.data15m = self.calculate_macd(data15m)
         self.data15m = self.calculate_rsi(self.data15m)
         self.data15m = self.calculate_overall_bias(self.data15m)
+
+        self.data5m = self.calculate_bollinger_bands(self.data5m)
+        self.data5m = self.add_trade_levels(self.data5m)
         
         # start = pd.Timestamp("2026-09-10 22:50:00", tz="America/New_York")
         # end   = pd.Timestamp("2026-09-11 03:20:00", tz="America/New_York")
@@ -30,7 +33,7 @@ class ServiceManager:
 
         if not self.data5m.empty:
             print(f"[{symbol} 5m] Bias change alerts:")
-            print(self.data5m.tail(10))
+            print(self.data5m.tail(25))
             true_rows = self.data5m[self.data5m['BiasChanged'] == True]
             last_true_row = true_rows.iloc[-1]
             print(last_true_row)
@@ -117,6 +120,16 @@ class ServiceManager:
         del diff, gain, loss, rs, rsi_raw, rsi_hist, hist_smooth, hist_slope, same_direction, meaningful
         return df
 
+    
+    def calculate_bollinger_bands(self, df, period=20, std_dev=1.2):
+        mid    = df['close'].rolling(window=period).mean()
+        stddev = df['close'].rolling(window=period).std()
+        df['midbnd'] = mid.round(2)
+        df['ubnd']   = (mid + std_dev * stddev).round(2)
+        df['lbnd']   = (mid - std_dev * stddev).round(2)
+        del mid, stddev
+        return df
+
     def calculate_overall_bias(self, df):
         bullish = (df['MACDTrend'] == "Up") & df['RSITrend'].isin(["Up"])
         bearish = (df['MACDTrend'] == "Down") & df['RSITrend'].isin(["Down"])
@@ -143,6 +156,49 @@ class ServiceManager:
 
         del bearish, bullish
         return df
+
+    def add_trade_levels(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Add OpenOrder, StopLoss, Target, LevelsValid columns.
+
+        Only on rows where BiasChanged is True:
+            Bullish: OpenOrder=midbnd, StopLoss=prev low,  Target=ubnd
+                    accepted only if StopLoss < OpenOrder < Target
+            Bearish: OpenOrder=midbnd, StopLoss=prev high, Target=lbnd
+                    accepted only if StopLoss > OpenOrder > Target
+        Rejected / non-signal rows (and rows with NaN bands or no previous
+        candle) get 0 in all three levels; LevelsValid is True only for accepted
+        signals, so `BiasChanged & ~LevelsValid` lists the rejected ones.
+        """
+        out = df.copy()
+
+        f64 = lambda col: out[col].to_numpy(dtype="float64")
+        changed = out["BiasChanged"].fillna(False).to_numpy(dtype=bool)
+        bias = out["OverallBias"].to_numpy(dtype=object)
+        is_long = changed & (bias == "Bullish")
+        is_short = changed & (bias == "Bearish")
+
+        entry = f64("midbnd").round(2)
+        #stop = np.where(is_long, np.roll(f64("low"), 1), np.roll(f64("high"), 1))
+        #stop[0] = np.nan  # roll wraps the last bar around; row 0 has no prev candle
+        #stop = stop.round(2)
+        stop = np.where(is_long, f64("lbnd"), f64("ubnd")).round(2)
+        target = np.where(is_long, f64("ubnd"), f64("lbnd")).round(2)
+
+        # valid = (is_long & (stop < entry) & (entry < target)) | (
+        #     is_short & (stop > entry) & (entry > target)            )
+        # out["OpenOrder"] = np.where(valid, entry, 0.0)
+        # out["StopLoss"] = np.where(valid, stop, 0.0)
+        # out["Target"] = np.where(valid, target, 0.0)
+        # out["LevelIsValid"] =valid
+        out["OpenOrder"] = entry
+        out["StopLoss"] = stop
+        out["Target"] = target
+
+        out = out.drop(columns=["MACDTrend"," RSITrend","PreviousBias","midbnd","ubnd","lbnd"], errors="ignore")
+        df= out.copy()
+        del changed, bias, entry, stop, target
+
+        return out
 
 
 

@@ -73,7 +73,8 @@ def main():
                 row5mdt = row5m_index.to_pydatetime()
             hour = row5mdt.hour
             minute = row5mdt.minute
-            msg = f"{row5m['symbol']} 5m Bias changed({hour}:{minute:02d}) to {row5m['OverallBias']}, close is {row5m.close}, 15m bias is {row15m['OverallBias']} (prevbias: {row15m['PreviousBias']})"
+            msg = ( f"{row5m['symbol']} 5m Bias changed({hour}:{minute:02d}) to {row5m['OverallBias']}, close is {row5m.close}, stop {row5m.StopLoss} target {row5m.Target}, ", 
+                f"15m bias is {row15m['OverallBias']} (prevbias: {row15m['PreviousBias']})" )
             print(msg)
             alertMgr.send_chart_alert(msg)
         else:
