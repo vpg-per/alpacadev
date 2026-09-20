@@ -50,42 +50,36 @@ def run_sector_chart():
 def main():
     symbols, sector_chart_only = define_input_symbols()
 
-    if sector_chart_only:
-        # Explicit --sector-chart flag (wired up from the run_sector_chart
-        # workflow_dispatch input): just build/persist the chart and stop,
-        # skipping the per-symbol bias analysis below.
-        run_sector_chart()
-        return
+    if not sector_chart_only:
+        objMgr = ServiceManager()
+        alertMgr = AlertManager()
+        for sym in symbols:
+            row5m, row15m  = objMgr.analyze_stockdata(sym)
 
-    objMgr = ServiceManager()
-    alertMgr = AlertManager()
-    for sym in symbols:
-        row5m, row15m  = objMgr.analyze_stockdata(sym)
-
-        if row5m is not None:
-            row5m_index = row5m.name
-            if isinstance(row5m_index, str):
-                row5mdt = datetime.fromisoformat(row5m_index)
-            elif isinstance(row5m_index, datetime):
-                row5mdt = row5m_index
+            if row5m is not None:
+                row5m_index = row5m.name
+                if isinstance(row5m_index, str):
+                    row5mdt = datetime.fromisoformat(row5m_index)
+                elif isinstance(row5m_index, datetime):
+                    row5mdt = row5m_index
+                else:
+                    # e.g. pandas.Timestamp or numpy.datetime64
+                    row5mdt = row5m_index.to_pydatetime()
+                hour = row5mdt.hour
+                minute = row5mdt.minute
+                msg = (
+                    f"{row5m['symbol']} 5m Bias changed({hour}:{minute:02d}) to {row5m['OverallBias']}, close is {row5m.close}, stop {row5m.StopLoss} target {row5m.Target}, "
+                    f"15m bias is {row15m['OverallBias']} (prevbias: {row15m['PreviousBias']})"
+                )
+                print(msg)
+                alertMgr.send_chart_alert(msg)
             else:
-                # e.g. pandas.Timestamp or numpy.datetime64
-                row5mdt = row5m_index.to_pydatetime()
-            hour = row5mdt.hour
-            minute = row5mdt.minute
-            msg = (
-                f"{row5m['symbol']} 5m Bias changed({hour}:{minute:02d}) to {row5m['OverallBias']}, close is {row5m.close}, stop {row5m.StopLoss} target {row5m.Target}, "
-                f"15m bias is {row15m['OverallBias']} (prevbias: {row15m['PreviousBias']})"
-            )
-            print(msg)
-            alertMgr.send_chart_alert(msg)
-        else:
-            print(f"No bias change for {sym} stock on the latest bar.")
+                print(f"No bias change for {sym} stock on the latest bar.")
 
     now_et = datetime.now(config.EASTERN)
-    if in_sector_chart_window(now_et):
+    if in_sector_chart_window(now_et) or sector_chart_only:
         run_sector_chart()
-
+ 
     # combined = fetch_stock_data(symbol, "5min")
     # print(f"--- {symbol} ---")
     # print(combined)
