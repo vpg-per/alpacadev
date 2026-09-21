@@ -15,7 +15,7 @@ on:
     # Every 5 minutes (at :02, :07, :12 ... :57), every hour, Monday to Friday, Eastern Time.
     # Uses an explicit comma-separated minute list instead of a step-increment slash,
     # which prevents the GitHub Actions runner engine from skipping the high-frequency trigger.
-    - cron: '2,7,12,17,22,27,32,37,42,47,52,57 * * * 1-5'
+    - cron: '2,7,12,17,22,27,32,37,42,47,52,57 * * * 0-5'
       timezone: "America/New_York"
 
 env:
