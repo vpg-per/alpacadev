@@ -68,16 +68,17 @@ def main():
                     row5mdt = row5m_index.to_pydatetime()
                 hour = row5mdt.hour
                 minute = row5mdt.minute
-                allsymbols_data.append( (
+                msg= (
                     f"{row5m['symbol']} 5m Bias changed({hour}:{minute:02d}) to {row5m['OverallBias']}, close is {row5m.close}, stop {row5m.StopLoss} target {row5m.Target}, "
                     f"15m bias is {row15m['OverallBias']} (prevbias: {row15m['PreviousBias']})"
-                ))
+                )
+                print(msg)
+                allsymbols_data.append(msg)
             else:
                 print(f"No bias change for {sym} stock on the latest bar.")
         if allsymbols_data:
             combinedmsg = ",".join(allsymbols_data)
             alertMgr.send_chart_alert(combinedmsg)
-            print(combinedmsg)
 
     now_et = datetime.now(config.EASTERN)
     if in_sector_chart_window(now_et) or sector_chart_only:
