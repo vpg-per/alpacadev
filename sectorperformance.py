@@ -6,6 +6,7 @@ result to a PNG file. Call generate_sector_chart() to (re)build the chart;
 it's designed to be invoked periodically (see main.py), not run at import
 time, so all "now"-dependent state lives inside the function.
 """
+import time
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -13,7 +14,7 @@ import matplotlib.dates as mdates
 import matplotlib.gridspec as gridspec
 import config
 import alaDataManager as dm
-from datetime import datetime, time as dt_time
+from datetime import datetime, timedelta, time as dt_time
 
 SECTORS = {
     "XLB": "Materials", "XLC": "Comm Svcs", "XLE": "Energy",
@@ -107,7 +108,14 @@ def generate_sector_chart(output_path: str = "sectors_5min.png") -> str:
     # ---- data is still downloaded from midnight (unchanged fetch behavior) ----
     now_et = datetime.now(config.EASTERN)
     midnight = now_et.replace(hour=0, minute=0, second=0, microsecond=0)
-    config.LOOKBACK_DAYS = (now_et - midnight).days + 1
+    # `(now_et - midnight).days` is always 0 (midnight is *today's* midnight,
+    # so the gap is always < 24h), so this used to always evaluate to 1 --
+    # not enough to reach the prior trading session's close across a
+    # weekend or holiday (e.g. Monday would only look back to Sunday).
+    # Floor it at 5 calendar days so a short holiday weekend can't leave
+    # _pct_change_since_prev_close with no prior-close data to compare against.
+    MIN_LOOKBACK_DAYS = 5
+    config.LOOKBACK_DAYS = max((now_et - midnight).days + 1, MIN_LOOKBACK_DAYS)
 
     # ---- the chart window is capped to 5am-5pm ET, but only extends as
     # far as data actually exists ----
@@ -124,8 +132,10 @@ def generate_sector_chart(output_path: str = "sectors_5min.png") -> str:
     # latest available bar reaches before deciding where the x-axis ends ----
     fetched = {}
     latest_data_ts = None
-    for sym in SECTORS:
-        full_df = dm.fetch_stock_data(sym, "5min")
+    for i, sym in enumerate(SECTORS):
+        if i > 0:
+            time.sleep(1.0)  # avoid tripping Yahoo's throttling with back-to-back requests
+        full_df = dm.fetch_sector_data_yahoo(sym)
         fetched[sym] = full_df
         if full_df is not None and not full_df.empty:
             df_in_window = full_df[(full_df.index >= display_start) & (full_df.index <= max_display_end)]
@@ -139,10 +149,11 @@ def generate_sector_chart(output_path: str = "sectors_5min.png") -> str:
         # aren't jammed right against the axis edge
         pad = (latest_data_ts - display_start) * 0.03
         display_end = min(latest_data_ts + pad, max_display_end)
-        if display_end <= open_t:
-            # too little of the trading day has data yet to make a
-            # sensible dynamic window -- fall back to the full span
-            display_end = max_display_end
+        # floor the window width so a chart with only a couple of bars
+        # (e.g. right at pre-market open) doesn't collapse to near-zero width
+        min_window = timedelta(minutes=30)
+        if display_end - display_start < min_window:
+            display_end = min(display_start + min_window, max_display_end)
     else:
         display_end = max_display_end
 
@@ -191,7 +202,8 @@ def generate_sector_chart(output_path: str = "sectors_5min.png") -> str:
 
     # XLV isn't charted (dropped to reduce clutter) but is still needed to
     # classify the risk-off group in the side panel.
-    table_stats["XLV"] = _pct_change_since_prev_close(dm.fetch_stock_data("XLV", "5min"), midnight)
+    time.sleep(1.0)
+    table_stats["XLV"] = _pct_change_since_prev_close(dm.fetch_sector_data_yahoo("XLV"), midnight)
 
     # ---- de-overlap end-of-line labels ----
     series_data.sort(key=lambda t: t[3])  # ascending by last plotted value

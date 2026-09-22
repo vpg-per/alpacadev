@@ -85,6 +85,36 @@ def download_stock_data(
     return None
 
 
+def fetch_sector_data_yahoo(
+    symbol: str,
+    days_back: int | None = None,
+) -> pd.DataFrame | None:
+    if days_back is None:
+        days_back = config.LOOKBACK_DAYS
+
+    now_et = datetime.now(config.EASTERN)
+    start = now_et - timedelta(days=days_back)
+
+    df = download_stock_data(symbol, start, now_et, interval="5m")
+    if df is None or df.empty:
+        return None
+
+    mask = (df.index.time >= dt_time(4, 0)) & (df.index.time < dt_time(20, 0))
+    df = df.loc[mask].copy()
+    if df.empty:
+        return None
+
+    df = drop_incomplete_last_candle(df, "5min")
+    if df.empty:
+        return None
+
+    df["feed"] = "yahoo"
+    df["symbol"] = symbol
+    df["interval"] = "5min"
+    df = round_ohlc(df)
+    return df
+
+
 def fetch_recent_yahoo(
     symbol: str = config.SYMBOL,
     minutes: int = 30,
