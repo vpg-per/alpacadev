@@ -49,9 +49,9 @@ def run_sector_chart():
 
 def main():
     symbols, sector_chart_only = define_input_symbols()
+    objMgr = ServiceManager()
 
     if not sector_chart_only:
-        objMgr = ServiceManager()
         alertMgr = AlertManager()
         allsymbols_data = []
         for sym in symbols:
