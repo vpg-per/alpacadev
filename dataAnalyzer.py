@@ -33,7 +33,7 @@ class ServiceManager:
 
         if not self.data5m.empty:
             print(f"[{symbol} 5m] Bias change alerts:")
-            print(self.data5m.tail(20).to_string())
+            print(self.data5m.tail(20).to_string(columns=['close', 'OverallBias','BiasChanged', 'LevelIsValid'], index=True))
             true_rows = self.data5m[self.data5m['LevelIsValid'] == True]
             last_true_row = true_rows.iloc[-1]
             print(last_true_row)
@@ -190,9 +190,6 @@ class ServiceManager:
         out["StopLoss"] = np.where(valid, stop, 0.0)
         out["Target"] = np.where(valid, target, 0.0)
         out["LevelIsValid"] =valid
-        out["OpenOrder"] = entry
-        out["StopLoss"] = stop
-        out["Target"] = target
 
         out = out.drop(columns=["MACDTrend"," RSITrend","PreviousBias","midbnd","ubnd","lbnd"], errors="ignore")
         df= out.copy()
