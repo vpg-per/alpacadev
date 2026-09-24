@@ -77,7 +77,7 @@ def main():
             else:
                 print(f"No bias change for {sym} stock on the latest bar.")
         if allsymbols_data:
-            combinedmsg = ",".join(allsymbols_data)
+            combinedmsg = "\n".join(allsymbols_data)
             alertMgr.send_chart_alert(combinedmsg)
 
     now_et = datetime.now(config.EASTERN)

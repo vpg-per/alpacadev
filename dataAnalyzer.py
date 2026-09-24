@@ -34,11 +34,11 @@ class ServiceManager:
         if not self.data5m.empty:
             print(f"[{symbol} 5m] Bias change alerts:")
             print(self.data5m.tail(20).to_string())
-            true_rows = self.data5m[self.data5m['BiasChanged'] == True]
+            true_rows = self.data5m[self.data5m['LevelIsValid'] == True]
             last_true_row = true_rows.iloc[-1]
             print(last_true_row)
         last_5mrow = self.data5m.iloc[-1]
-        if last_5mrow['BiasChanged']:
+        if last_5mrow['LevelIsValid']:
             return last_5mrow, self.data15m.iloc[-1]
         
         return None, None
@@ -121,7 +121,7 @@ class ServiceManager:
         return df
 
     
-    def calculate_bollinger_bands(self, df, period=20, std_dev=1.2):
+    def calculate_bollinger_bands(self, df, period=20, std_dev=2):
         mid    = df['close'].rolling(window=period).mean()
         stddev = df['close'].rolling(window=period).std()
         df['midbnd'] = mid.round(2)
@@ -184,12 +184,12 @@ class ServiceManager:
         stop = np.where(is_long, f64("lbnd"), f64("ubnd")).round(2)
         target = np.where(is_long, f64("ubnd"), f64("lbnd")).round(2)
 
-        # valid = (is_long & (stop < entry) & (entry < target)) | (
-        #     is_short & (stop > entry) & (entry > target)            )
-        # out["OpenOrder"] = np.where(valid, entry, 0.0)
-        # out["StopLoss"] = np.where(valid, stop, 0.0)
-        # out["Target"] = np.where(valid, target, 0.0)
-        # out["LevelIsValid"] =valid
+        valid = (is_long & (stop < entry) & (entry < target)) | (
+            is_short & (stop > entry) & (entry > target)            )
+        out["OpenOrder"] = np.where(valid, entry, 0.0)
+        out["StopLoss"] = np.where(valid, stop, 0.0)
+        out["Target"] = np.where(valid, target, 0.0)
+        out["LevelIsValid"] =valid
         out["OpenOrder"] = entry
         out["StopLoss"] = stop
         out["Target"] = target
