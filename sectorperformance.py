@@ -38,6 +38,7 @@ SECTOR_COLORS = {
     "XLU":  "#9A6324",
     "XLV":  "#800000",
     "XLY":  "#000075",
+    "XLV": "#d73027",
 }
 BLUE_LBL = "#1f4e9c"
 UP_COLOR = "#1a9850"
@@ -70,7 +71,7 @@ TABLE_NAMES = dict(SECTORS)
 TABLE_NAMES["XLV"] = "Health Care"
 
 
-def _pct_change_since_prev_close(df, midnight):
+def _pct_change_since_prev_close(sym, df, midnight):
     """Compare the latest available price in df to the prior trading day's
     regular-hours close (the last bar timestamped before 4:00 PM ET on the
     prior day). Returns (dollar_change, pct_change, latest_price), any of
@@ -98,6 +99,7 @@ def _pct_change_since_prev_close(df, midnight):
 
     change = latest_price - prev_close
     pct = change / prev_close * 100
+    print(f"{sym}, prev_close: {prev_close}, cur_price:{latest_price}, change: {change}, percent: {pct}")
     return change, pct, latest_price
 
 
@@ -180,7 +182,7 @@ def generate_sector_chart(output_path: str = "sectors_5min.png") -> str:
         color = SECTOR_COLORS[sym]
         full_df = fetched[sym]
 
-        table_stats[sym] = _pct_change_since_prev_close(full_df, midnight)
+        table_stats[sym] = _pct_change_since_prev_close(sym, full_df, midnight)
 
         # data is fetched from midnight as before; only the DISPLAYED slice
         # (and the rebase-to-100 anchor) runs from 5am to the dynamic
@@ -203,7 +205,6 @@ def generate_sector_chart(output_path: str = "sectors_5min.png") -> str:
     # XLV isn't charted (dropped to reduce clutter) but is still needed to
     # classify the risk-off group in the side panel.
     time.sleep(1.0)
-    table_stats["XLV"] = _pct_change_since_prev_close(dm.fetch_sector_data_yahoo("XLV"), midnight)
 
     # ---- de-overlap end-of-line labels ----
     series_data.sort(key=lambda t: t[3])  # ascending by last plotted value

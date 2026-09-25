@@ -122,7 +122,7 @@ def fetch_recent_yahoo(
     now_et = datetime.now(config.EASTERN)
     start = now_et - timedelta(minutes=minutes)
 
-    df = download_stock_data(symbol, start, now_et, interval="5m")
+    df = download_stock_data(symbol, start, now_et, interval="30m")
     if df is None or df.empty:
         return None
 
@@ -131,10 +131,6 @@ def fetch_recent_yahoo(
     if df.empty:
         return None
     
-    df = drop_incomplete_last_candle(df, "5min")
-    if df.empty:
-        return None
-
     df["feed"] = "yahoo"
     df = round_ohlc(df)
     return df
