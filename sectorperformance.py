@@ -99,7 +99,7 @@ def _pct_change_since_prev_close(sym, df, midnight):
 
     change = latest_price - prev_close
     pct = change / prev_close * 100
-    print(f"{sym}, prev_close: {prev_close}, cur_price:{latest_price}, change: {change}, percent: {pct}")
+    print(f"{sym}, prev_close: {prev_close}, cur_price:{latest_price}, change: {change:.2f}, percent: {pct:.2f}")
     return change, pct, latest_price
 
 
