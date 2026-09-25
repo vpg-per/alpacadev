@@ -49,10 +49,10 @@ def run_sector_chart():
 
 def main():
     symbols, sector_chart_only = define_input_symbols()
+    alertMgr = AlertManager()
     objMgr = ServiceManager()
 
     if not sector_chart_only:
-        alertMgr = AlertManager()
         allsymbols_data = []
         for sym in symbols:
             row5m, row15m  = objMgr.analyze_stockdata(sym)
