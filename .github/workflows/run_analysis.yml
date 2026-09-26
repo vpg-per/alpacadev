@@ -67,4 +67,4 @@ jobs:
         token: ${{ github.token }}
         repository: ${{ github.repository }}
         retain_days: 0
-        keep_minimum_runs: 100 # Retains the last 100 logs for troubleshooting anomalies
+        keep_minimum_runs: 250 # Retains the last 100 logs for troubleshooting anomalies
