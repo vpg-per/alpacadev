@@ -18,6 +18,11 @@ jobs:
   run-script:
     timeout-minutes: 15
     runs-on: ubuntu-latest
+    
+    # Crucial Fix: Explicitly give this job permission to delete/write Actions history
+    permissions:
+      actions: write
+      contents: read
 
     steps:
     - name: Checkout Code
@@ -37,35 +42,29 @@ jobs:
     # Fixed: Corrected alignment for 'env:'. It must sit exactly flush under the target step execution block.
     - name: Run Candle analysis
       env:
-        TELE_CHAT_ID: ${{ vars.TELE_CHAT_ID }}
-        TELE_TOKEN: ${{ vars.TELE_TOKEN }}
-        DATABASE_URL: ${{ vars.DATABASE_URL }}
-        ALA_API_KEY: ${{ vars.ALA_API_KEY }}
-        ALA_SECRET_KEY: ${{ vars.ALA_SECRET_KEY }}
-        RUN_SECTOR_CHART: ${{ github.event.inputs.run_sector_chart }}
+        TELE_CHAT_ID: \${{ vars.TELE_CHAT_ID }}
+        TELE_TOKEN: \${{ vars.TELE_TOKEN }}
+        DATABASE_URL: \${{ vars.DATABASE_URL }}
+        ALA_API_KEY: \${{ vars.ALA_API_KEY }}
+        ALA_SECRET_KEY: \${{ vars.ALA_SECRET_KEY }}
+        RUN_SECTOR_CHART: \${{ github.event.inputs.run_sector_chart }}
       # When the run_sector_chart workflow_dispatch input is provided as
       # "true", skip the normal per-symbol run and just call
       # run_sector_chart() (via `python main.py --sector-chart`).
       # On push/schedule triggers the input is unset, so this always
       # falls through to the normal analysis run.
       run: |
-        if [ "$RUN_SECTOR_CHART" = "true" ]; then
+        if [ "\$RUN_SECTOR_CHART" = "true" ]; then
           python main.py --sector-chart
         else
-          python main.py ${{ vars.CUSTOM_ALERT_SYMBOLS }}
+          python main.py \${{ vars.CUSTOM_ALERT_SYMBOLS }}
         fi
 
-
-  # New parallel job added to purge logs every 5 minutes 
-  clear-old-runs:
-    runs-on: ubuntu-latest
-    permissions:
-      actions: write
-    steps:
-      - name: Delete old workflow runs
-        uses: Mattraks/delete-workflow-runs@v2
-        with:
-          token: \${{ github.token }}
-          repository: \${{ github.repository }}
-          retain_days: 0
-          keep_minimum_runs: 100 # Keeps the last 100 runs so you can still track recent failures if they happen
+    # Added: Automatic log purging step right after your script runs
+    - name: Delete old workflow runs
+      uses: Mattraks/delete-workflow-runs@v2
+      with:
+        token: \${{ github.token }}
+        repository: \${{ github.repository }}
+        retain_days: 0
+        keep_minimum_runs: 100 # Retains the last 100 logs for troubleshooting anomalies
