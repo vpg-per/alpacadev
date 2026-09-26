@@ -19,7 +19,7 @@ jobs:
     timeout-minutes: 15
     runs-on: ubuntu-latest
     
-    # Crucial Fix: Explicitly give this job permission to delete/write Actions history
+    # Crucial Fix: Explicitly give this job permission to delete Actions history
     permissions:
       actions: write
       contents: read
@@ -67,4 +67,4 @@ jobs:
         token: \${{ github.token }}
         repository: \${{ github.repository }}
         retain_days: 0
-        keep_minimum_runs: 100 # Retains the last 100 logs for troubleshooting anomalies
+        keep_minimum_runs: 100 # Retains the last 3 logs for troubleshooting anomalies
