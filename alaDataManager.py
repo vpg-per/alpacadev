@@ -95,33 +95,6 @@ def fetch_sector_data_yahoo(
     now_et = datetime.now(config.EASTERN)
     start = now_et - timedelta(days=days_back)
 
-    df = download_stock_data(symbol, start, now_et, interval="5m")
-    if df is None or df.empty:
-        return None
-
-    mask = (df.index.time >= dt_time(4, 0)) & (df.index.time < dt_time(20, 0))
-    df = df.loc[mask].copy()
-    if df.empty:
-        return None
-
-    df = drop_incomplete_last_candle(df, "5min")
-    if df.empty:
-        return None
-
-    df["feed"] = "yahoo"
-    df["symbol"] = symbol
-    df["interval"] = "5min"
-    df = round_ohlc(df)
-    return df
-
-
-def fetch_recent_yahoo(
-    symbol: str = config.SYMBOL,
-    minutes: int = 30,
-) -> pd.DataFrame | None:
-    now_et = datetime.now(config.EASTERN)
-    start = now_et - timedelta(minutes=minutes)
-
     df = download_stock_data(symbol, start, now_et, interval="30m")
     if df is None or df.empty:
         return None
@@ -130,7 +103,32 @@ def fetch_recent_yahoo(
     df = df.loc[mask].copy()
     if df.empty:
         return None
+
+    df["feed"] = "yahoo"
+    df["symbol"] = symbol
+    df = round_ohlc(df)
+    return df
+
+def fetch_recent_yahoo(
+    symbol: str = config.SYMBOL,
+    minutes: int = 30,
+) -> pd.DataFrame | None:
+    now_et = datetime.now(config.EASTERN)
+    start = now_et - timedelta(minutes=minutes)
+
+    df = download_stock_data(symbol, start, now_et, interval="5m")
+    if df is None or df.empty:
+        return None
+
+    mask = (df.index.time >= dt_time(4, 0)) & (df.index.time < dt_time(20, 0))
+    df = df.loc[mask].copy()
+    if df.empty:
+        return None
     
+    df = drop_incomplete_last_candle(df, "5min")
+    if df.empty:
+        return None
+
     df["feed"] = "yahoo"
     df = round_ohlc(df)
     return df
