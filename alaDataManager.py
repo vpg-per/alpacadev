@@ -88,14 +88,16 @@ def download_stock_data(
 def fetch_sector_data_yahoo(
     symbol: str,
     days_back: int | None = None,
+    end_et: datetime | None = None,
 ) -> pd.DataFrame | None:
     if days_back is None:
         days_back = config.LOOKBACK_DAYS
+    if end_et is None:
+        end_et = datetime.now(config.EASTERN)
 
-    now_et = datetime.now(config.EASTERN)
-    start = now_et - timedelta(days=days_back)
+    start = end_et - timedelta(days=days_back)
 
-    df = download_stock_data(symbol, start, now_et, interval="30m")
+    df = download_stock_data(symbol, start, end_et, interval="30m")
     if df is None or df.empty:
         return None
 

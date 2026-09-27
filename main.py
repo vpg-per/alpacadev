@@ -42,6 +42,9 @@ def in_sector_chart_window(now: datetime) -> bool:
 def run_sector_chart():
     """Build the sector comparison chart and persist it as the single
     row in the Neon DB table (old row(s) removed first)."""
+    # start_et=config.EASTERN.localize(datetime(2026,9,22,6,0))
+    # end_et=config.EASTERN.localize(datetime(2026,9,22,17,0))
+    # generate_sector_chart(start_et, end_dt)
     png_path = generate_sector_chart()
     ChartDBManager().save_chart(png_path)
     print(f"Sector chart updated and saved to DB: {png_path}")

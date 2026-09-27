@@ -2,9 +2,11 @@
 
 Fetches sector ETF data, builds a matplotlib chart comparing normalized
 intraday performance plus a risk-on/risk-off side panel, and saves the
-result to a PNG file. Call generate_sector_chart() to (re)build the chart;
-it's designed to be invoked periodically (see main.py), not run at import
-time, so all "now"-dependent state lives inside the function.
+result to a PNG file. Call generate_sector_chart() to (re)build the chart
+for "today" (the default), or pass start_et/end_et (US/Eastern datetimes)
+to build it for any other trading day/window instead. It's designed to be
+invoked periodically (see main.py), not run at import time, so all
+"now"-dependent state lives inside the function.
 """
 import time
 import matplotlib
@@ -21,7 +23,6 @@ SECTORS = {
     "XLF": "Financials", "XLI": "Industrials", "XLK": "Technology",
     "XLP": "Cons Staples", "XLU": "Utilities", "XLY": "Cons Discret",
 }
-# "XLRE": "Real Estate",  "XLV": "Health Care",
 
 # Fixed color per symbol (not list position), so a given sector always
 # renders the same color run to run, regardless of dict ordering.
@@ -34,11 +35,9 @@ SECTOR_COLORS = {
     "XLI":  "#911eb4",
     "XLK":  "#42d4f4",
     "XLP":  "#f032e6",
-    "XLRE": "#469990",
     "XLU":  "#9A6324",
-    "XLV":  "#800000",
+    "XLV":  "#d73027",
     "XLY":  "#000075",
-    "XLV": "#d73027",
 }
 BLUE_LBL = "#1f4e9c"
 UP_COLOR = "#1a9850"
@@ -64,9 +63,13 @@ RISK_ON = ["XLK", "XLI", "XLY"]
 RISK_OFF = ["XLP", "XLV", "XLU"]
 OTHER_SYMS = ["XLE", "XLB", "XLF", "XLC"]
 
-# Names for symbols referenced in the table but not plotted on the chart
-# (XLV was dropped from the line chart to reduce clutter, but is still
-# needed here to classify the risk-off group).
+# Symbols referenced only in the side panel/table, not plotted on the line
+# chart (XLV was dropped from the line chart to reduce clutter, but its
+# data still needs to be fetched so the risk-off classification and its
+# table row aren't stuck showing "N/A").
+TABLE_ONLY_SYMS = ["XLV"]
+ALL_FETCH_SYMS = list(SECTORS) + TABLE_ONLY_SYMS
+
 TABLE_NAMES = dict(SECTORS)
 TABLE_NAMES["XLV"] = "Health Care"
 
@@ -103,29 +106,41 @@ def _pct_change_since_prev_close(sym, df, midnight):
     return change, pct, latest_price
 
 
-def generate_sector_chart(output_path: str = "sectors_5min.png") -> str:
+def generate_sector_chart(
+    start_et: datetime | None = None,
+    end_et: datetime | None = None,
+    output_path: str = "sectors_5min.png",
+) -> str:
     """Build the sector comparison chart + risk-on/off panel and save it
     as a PNG. Returns the path to the saved file.
-    """
-    # ---- data is still downloaded from midnight (unchanged fetch behavior) ----
-    now_et = datetime.now(config.EASTERN)
-    midnight = now_et.replace(hour=0, minute=0, second=0, microsecond=0)
-    # `(now_et - midnight).days` is always 0 (midnight is *today's* midnight,
-    # so the gap is always < 24h), so this used to always evaluate to 1 --
-    # not enough to reach the prior trading session's close across a
-    # weekend or holiday (e.g. Monday would only look back to Sunday).
-    # Floor it at 5 calendar days so a short holiday weekend can't leave
-    # _pct_change_since_prev_close with no prior-close data to compare against.
-    MIN_LOOKBACK_DAYS = 5
-    config.LOOKBACK_DAYS = max((now_et - midnight).days + 1, MIN_LOOKBACK_DAYS)
 
-    # ---- the chart window is capped to 5am-5pm ET, but only extends as
+    start_et/end_et are optional US/Eastern datetimes bounding the chart's
+    display window. Omit both (the default) to get the original behavior:
+    today's session, 6:00 AM ET through "right now". Pass either one to
+    render a different day or window instead -- e.g. a past trading day's
+    full session, or a custom intraday slice -- with end_et also capping
+    how far sector data is fetched/displayed (it stands in for "now").
+    """
+    now_et = datetime.now(config.EASTERN)
+    anchor_et = end_et or now_et
+    midnight = anchor_et.replace(hour=0, minute=0, second=0, microsecond=0)
+    # `(anchor_et - midnight).days` is always 0 (midnight is *anchor_et's*
+    # own midnight, so the gap is always < 24h), so this used to always
+    # evaluate to 1 -- not enough to reach the prior trading session's
+    # close across a weekend or holiday (e.g. Monday would only look back
+    # to Sunday). Floor it at 5 calendar days so a short holiday weekend
+    # can't leave _pct_change_since_prev_close with no prior-close data to
+    # compare against.
+    MIN_LOOKBACK_DAYS = 5
+    config.LOOKBACK_DAYS = max((anchor_et - midnight).days + 1, MIN_LOOKBACK_DAYS)
+
+    # ---- the chart window defaults to 6am-5pm ET, but only extends as
     # far as data actually exists ----
     # (4-5am and 5-8pm have too little data to be worth showing, and
     # reserving empty space all the way to 5pm when e.g. only data up to
     # 2pm exists just wastes horizontal space / squishes the real lines)
-    display_start = midnight.replace(hour=6, minute=0)
-    max_display_end = midnight.replace(hour=17, minute=0)
+    display_start = start_et or midnight.replace(hour=6, minute=0)
+    max_display_end = end_et or midnight.replace(hour=17, minute=0)
 
     open_t = midnight.replace(hour=9, minute=30)
     close_t = midnight.replace(hour=16, minute=0)
@@ -134,12 +149,12 @@ def generate_sector_chart(output_path: str = "sectors_5min.png") -> str:
     # latest available bar reaches before deciding where the x-axis ends ----
     fetched = {}
     latest_data_ts = None
-    for i, sym in enumerate(SECTORS):
+    for i, sym in enumerate(ALL_FETCH_SYMS):
         if i > 0:
             time.sleep(1.0)  # avoid tripping Yahoo's throttling with back-to-back requests
-        full_df = dm.fetch_sector_data_yahoo(sym)
+        full_df = dm.fetch_sector_data_yahoo(sym, end_et=anchor_et)
         fetched[sym] = full_df
-        if full_df is not None and not full_df.empty:
+        if sym in SECTORS and full_df is not None and not full_df.empty:
             df_in_window = full_df[(full_df.index >= display_start) & (full_df.index <= max_display_end)]
             if not df_in_window.empty:
                 ts = df_in_window.index[-1]
@@ -202,9 +217,11 @@ def generate_sector_chart(output_path: str = "sectors_5min.png") -> str:
         series_data.append((sym, color, df.index[-1], plot_norm.iloc[-1], table_stats[sym][1]))
         all_plot_values.extend(plot_norm.dropna().tolist())
 
-    # XLV isn't charted (dropped to reduce clutter) but is still needed to
-    # classify the risk-off group in the side panel.
-    time.sleep(1.0)
+    # table-only symbols (XLV): compute their stats for the side panel, but
+    # they're intentionally not added to series_data/all_plot_values since
+    # they don't get a line on the chart.
+    for sym in TABLE_ONLY_SYMS:
+        table_stats[sym] = _pct_change_since_prev_close(sym, fetched.get(sym), midnight)
 
     # ---- de-overlap end-of-line labels ----
     series_data.sort(key=lambda t: t[3])  # ascending by last plotted value
