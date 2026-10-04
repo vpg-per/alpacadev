@@ -54,7 +54,7 @@ class ServiceManager:
 
         df['macd']      = macd_line.round(2).astype('float32')
         df['msignal']   = sig_line.round(2).astype('float32')
-        df['histogram'] = (macd_line - sig_line).round(2).astype('float32')
+        df['histogram'] = (macd_line - sig_line).round(2).astype('float32')		
         above_signal = macd_line > sig_line
         below_signal = macd_line < sig_line
         above_zero   = macd_line > 0
@@ -65,8 +65,18 @@ class ServiceManager:
         trend[below_signal & below_zero] = "Down"
         df['MACDTrend'] = trend        
         df = df.drop(columns=["macd","msignal","histogram"], errors="ignore")
+        prev = df["MACDTrend"].shift(1)
+        curr = df["MACDTrend"]
+        rank  = {"Down": -1, "Sideways": 0, "Up": 1}
+        delta = curr.map(rank) - prev.map(rank)
 
-        del close, ema_fast, ema_slow, macd_line, sig_line, above_signal, below_signal, above_zero, below_zero, trend
+        df["macdtrend_cross"] = np.select(
+            [delta > 0, delta < 0],
+            [1, -1],
+            default=0
+        ).astype("int8")
+
+        del close, ema_fast, ema_slow, macd_line, sig_line, above_signal, below_signal, above_zero, below_zero, trend, prev, curr, rank, delta
         return df
 
     def calculate_rsi(self, df, period=14, smooth=3, threshold=0.5):
@@ -115,6 +125,17 @@ class ServiceManager:
         df['rhistogram'] = rsi_hist
         df['momentum'] = momentum
         df['RSITrend'] = rsitrend
+        
+        prev = df["RSITrend"].shift(1)
+        curr = df["RSITrend"]
+        rank  = {"Down": -1, "Sideways": 0, "Up": 1}
+        delta = curr.map(rank) - prev.map(rank)
+
+        df["rsitrend_cross"] = np.select(
+            [delta > 0, delta < 0],
+            [1, -1],
+            default=0
+        ).astype("int8")
         df = df.drop(columns=["rsi","rsignal","rhistogram","momentum"], errors="ignore")
 
         del diff, gain, loss, rs, rsi_raw, rsi_hist, hist_smooth, hist_slope, same_direction, meaningful

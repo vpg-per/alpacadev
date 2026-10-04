@@ -58,6 +58,9 @@ def download_stock_data(
         resp.raise_for_status()
         data = resp.json()
         result = data["chart"]["result"][0]
+        if "timestamp" not in result:
+            return None  # no bars in window (weekend / off-hours)
+
         quotes = result["indicators"]["quote"][0]
 
         ts_arr = np.asarray(result["timestamp"], dtype="int64")
