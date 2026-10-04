@@ -1,0 +1,62 @@
+name: High TF analysis
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+    inputs:
+      run_sector_chart:
+        description: ""
+        required: false
+        default: false
+        type: boolean
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  run-script:
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    
+    # Crucial Fix: Explicitly give this job permission to delete Actions history
+    permissions:
+      actions: write
+      contents: read
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    # Fixed: Installed requirements first, then systematically set up Playwright binaries
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+    # Fixed: Corrected alignment for 'env:'. It must sit exactly flush under the target step execution block.
+    - name: Hight TF analysis
+      env:
+        TELE_CHAT_ID: ${{ vars.TELE_CHAT_ID }}
+        TELE_TOKEN: ${{ vars.TELE_TOKEN }}
+        DATABASE_URL: ${{ vars.DATABASE_URL }}
+        ALA_API_KEY: ${{ vars.ALA_API_KEY }}
+        ALA_SECRET_KEY: ${{ vars.ALA_SECRET_KEY }}
+        RUN_SECTOR_CHART: ${{ github.event.inputs.run_sector_chart }}
+        MULTI_STOCK_SYMBOLS: ${{ vars.MULTI_STOCK_SYMBOLS }}
+      run: |
+          python multisymbolscspattern_HTF.py 
+
+    # Added: Automatic log purging step right after your script runs
+    - name: Delete old workflow runs
+      uses: Mattraks/delete-workflow-runs@v2
+      with:
+        token: ${{ github.token }}
+        repository: ${{ github.repository }}
+        retain_days: 0
+        keep_minimum_runs: 5 # Retains the last 5 logs for troubleshooting anomalies
