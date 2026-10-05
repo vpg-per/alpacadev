@@ -5,22 +5,38 @@ from alertManager import AlertManager
 import numpy as np
 import os
 import pandas as pd
+from datetime import datetime
 
 objMgr = ServiceManager()
 alertMgr = AlertManager()
 
-def getTrendCrossvalue(symbol, interval) -> str :
+def getTrendCrossvalue(symbol, interval) -> tuple[str, str]:
 
     df = fetch_stock_data(symbol, interval)
     df = drop_incomplete_last_candle(df, interval)
     df = objMgr.calculate_rsi(df)
-    last = df["rsitrend_cross"].iloc[-1]
-    if last == 1:
-        return "Bullish"
-    elif last == -1:
-        return "Bearish"
+    print(df.tail(5).to_string())
+    last_rec = df.iloc[-1]
+    last_rec_index = last_rec.name
+    last = last_rec["rsitrend_cross"]
     
-    return "none"
+    if isinstance(last_rec_index, str):
+        last_recdt = datetime.fromisoformat(last_rec_index)
+    elif isinstance(last_rec_index, datetime):
+        last_recdt = last_rec_index
+    else:
+        last_recdt = last_rec_index.to_pydatetime()
+    hour = last_recdt.hour
+    minute = last_recdt.minute
+    lastrec_time = str(hour) + ":" + str(minute)
+    lastrec_signal = "none"
+    
+    if last == 1:
+        lastrec_signal = "Bullish"
+    elif last == -1:
+        lastrec_signal = "Bearish"
+    
+    return lastrec_signal, lastrec_time
 
 
 def process_alerts_request():
@@ -28,9 +44,9 @@ def process_alerts_request():
     interval = "30min"
     env_symbols = os.getenv("MULTI_STOCK_SYMBOLS", "")
     stocksymbols = [s.strip() for s in env_symbols.split(",") if s.strip()] or ['SPY']
-
+    rettime = ""
     for symbol in stocksymbols:
-        retval = getTrendCrossvalue(symbol, interval)
+        retval, rettime = getTrendCrossvalue(symbol, interval)
         if (retval == "Bullish"):
             bullish_symbols_data.append(symbol)
         elif(retval == "Bearish"):
@@ -44,7 +60,7 @@ def process_alerts_request():
         parts.append(f"Bearish: {bearish_combinedmsg}")
 
     if parts:
-        combinedmsg = f"Interval {interval}\n" + "\n".join(parts)
+        combinedmsg = f"Interval {interval} {f'(Candle time:{rettime})' if rettime is not None else ''}\n" + "\n".join(parts)
         print(combinedmsg)
         alertMgr.send_chart_alert(combinedmsg)
     else:
