@@ -4,25 +4,33 @@ import numpy as np
 import gc
 from datetime import datetime,timedelta
 import config
-from alaDataManager import fetch_stock_data, resample_bars
+from alaDataManager import fetch_stock_data, resample_bars, drop_incomplete_last_candle
 
 class ServiceManager:
     def __init__(self):
         pass
 
     def analyze_stockdata(self, symbol):
+
         data5m = fetch_stock_data(symbol, "5min")
-        data15m = resample_bars(data5m, "15min")
+        interval = "15min"
+        data15m = resample_bars(data5m, interval)
+        self.data15m = drop_incomplete_last_candle(data15m, interval)
+        interval = "30min"        
+        data30m = resample_bars(data5m, interval)
+        self.data30m = drop_incomplete_last_candle(data30m, interval)
 
         self.data5m = self.calculate_macd(data5m)
         self.data5m = self.calculate_rsi(self.data5m)
         self.data5m = self.calculate_overall_bias(self.data5m)
+
         self.data15m = self.calculate_macd(data15m)
         self.data15m = self.calculate_rsi(self.data15m)
         self.data15m = self.calculate_overall_bias(self.data15m)
 
         self.data5m = self.calculate_bollinger_bands(self.data5m)
         self.data5m = self.add_trade_levels(self.data5m)
+        self.data30m = self.calculate_rsi(self.data30m)
         
         # start = pd.Timestamp("2026-09-10 22:50:00", tz="America/New_York")
         # end   = pd.Timestamp("2026-09-11 03:20:00", tz="America/New_York")
@@ -33,12 +41,20 @@ class ServiceManager:
 
         if not self.data5m.empty:
             print(f"[{symbol} 5m] Bias change alerts:")
-            print(self.data5m.tail(20).to_string(columns=['close', 'OverallBias','BiasChanged', 'LevelIsValid'], index=True))
+            print(self.data5m.tail(20).to_string(columns=['close', 'OverallBias', 'BiasChanged', 'LevelIsValid'], index=True))
+            print(self.data15m.tail(5).to_string(columns=['close', 'PreviousBias', 'interval', 'OverallBias'], index=True))
+            print(self.data30m.tail(5).to_string(columns=['close', 'interval', 'RSITrend'], index=True))
             true_rows = self.data5m[self.data5m['LevelIsValid'] == True]
             last_true_row = true_rows.iloc[-1]
             print(last_true_row)
         last_5mrow = self.data5m.iloc[-1]
-        if last_5mrow['LevelIsValid']:
+        bias_5m = last_5mrow['OverallBias']
+        bias_15m = self.data15m['OverallBias'].iloc[-1]
+        bias_30m = self.data30m['RSITrend'].iloc[-1]
+        if last_5mrow['LevelIsValid'] and (
+            (bias_5m == "Bullish" and bias_15m in ["Bullish", "Sideways"] and bias_30m in ["Up", "Sideways"]) or 
+            (bias_5m == "Bearish" and bias_15m in ["Bearish", "Sideways"] and bias_30m in ["Down", "Sideways"])
+        ):
             return last_5mrow, self.data15m.iloc[-1]
         
         return None, None
