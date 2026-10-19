@@ -41,7 +41,7 @@ class ServiceManager:
 
         if not self.data5m.empty:
             print(f"[{symbol} 5m] Bias change alerts:")
-            print(self.data5m.tail(20).to_string(columns=['close', 'OverallBias', 'BiasChanged', 'LevelIsValid'], index=True))
+            print(self.data5m.tail(5).to_string(columns=['close', 'OverallBias', 'BiasChanged', 'LevelIsValid'], index=True))
             print(self.data15m.tail(5).to_string(columns=['close', 'PreviousBias', 'interval', 'OverallBias'], index=True))
             print(self.data30m.tail(5).to_string(columns=['close', 'interval', 'RSITrend'], index=True))
             true_rows = self.data5m[self.data5m['LevelIsValid'] == True]
