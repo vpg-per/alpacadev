@@ -52,8 +52,8 @@ class ServiceManager:
         bias_15m = self.data15m['OverallBias'].iloc[-1]
         bias_30m = self.data30m['RSITrend'].iloc[-1]
         if last_5mrow['LevelIsValid'] and (
-            (bias_5m == "Bullish" and bias_15m in ["Bullish", "Sideways"] and bias_30m in ["Up", "Sideways"]) or 
-            (bias_5m == "Bearish" and bias_15m in ["Bearish", "Sideways"] and bias_30m in ["Down", "Sideways"])
+            (bias_5m == "Bullish" and bias_15m in ["Bullish", "Sideways"]) or (bias_5m == "Bullish" and bias_30m in ["Up", "Sideways"])  or 
+            (bias_5m == "Bearish" and bias_15m in ["Bearish", "Sideways"]) or (bias_5m == "Bearish" and bias_30m in ["Down", "Sideways"])
         ):
             return last_5mrow, self.data15m.iloc[-1]
         
@@ -233,7 +233,6 @@ class ServiceManager:
         del changed, bias, entry, stop, target
 
         return out
-
 
 
     
