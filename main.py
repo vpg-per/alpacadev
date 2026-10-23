@@ -58,7 +58,7 @@ def main():
     if not sector_chart_only:
         allsymbols_data = []
         for sym in symbols:
-            row5m, row15m  = objMgr.analyze_stockdata(sym)
+            row5m, row_htf  = objMgr.analyze_stockdata(sym)
 
             if row5m is not None:
                 row5m_index = row5m.name
@@ -73,7 +73,7 @@ def main():
                 minute = row5mdt.minute
                 msg= (
                     f"{row5m['symbol']} 5m Bias changed({hour}:{minute:02d}) to {row5m['OverallBias']}, close is {row5m.close}, stop {row5m.StopLoss} target {row5m.Target}, "
-                    f"15m bias is {row15m['OverallBias']} (prevbias: {row15m['PreviousBias']})"
+                    f"{row_htf['interval']} bias is {row_htf['OverallBias']} (prevbias: {row_htf['PreviousBias']})"
                 )
                 print(msg)
                 allsymbols_data.append(msg)
