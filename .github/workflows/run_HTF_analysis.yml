@@ -10,6 +10,11 @@ on:
         required: false
         default: false
         type: boolean
+      symbols:
+        description: ""
+        required: false
+        default: ""
+        type: string
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -50,5 +55,5 @@ jobs:
         RUN_SECTOR_CHART: ${{ github.event.inputs.run_sector_chart }}
         MULTI_STOCK_SYMBOLS: ${{ vars.MULTI_STOCK_SYMBOLS }}
       run: |
-          python replay.py 
+          python replay.py ${{ inputs.symbols }}
 
