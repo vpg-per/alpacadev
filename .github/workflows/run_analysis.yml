@@ -47,18 +47,13 @@ jobs:
         DATABASE_URL: ${{ vars.DATABASE_URL }}
         ALA_API_KEY: ${{ vars.ALA_API_KEY }}
         ALA_SECRET_KEY: ${{ vars.ALA_SECRET_KEY }}
-        RUN_SECTOR_CHART: ${{ github.event.inputs.run_sector_chart }}
       # When the run_sector_chart workflow_dispatch input is provided as
       # "true", skip the normal per-symbol run and just call
       # run_sector_chart() (via `python main.py --sector-chart`).
       # On push/schedule triggers the input is unset, so this always
       # falls through to the normal analysis run.
       run: |
-        if [ "$RUN_SECTOR_CHART" = "true" ]; then
-          python main.py --sector-chart
-        else
-          python main.py ${{ vars.CUSTOM_ALERT_SYMBOLS }}
-        fi
+        python main.py ${{ vars.CUSTOM_ALERT_SYMBOLS }}
 
     # Added: Automatic log purging step right after your script runs
     - name: Delete old workflow runs
