@@ -50,5 +50,5 @@ jobs:
         RUN_SECTOR_CHART: ${{ github.event.inputs.run_sector_chart }}
         MULTI_STOCK_SYMBOLS: ${{ vars.MULTI_STOCK_SYMBOLS }}
       run: |
-          python multisymbolscspattern_HTF.py 
+          python replay.py 
 
