@@ -17,7 +17,7 @@ Pure functions on a 5-min OHLCV frame (no network, no config, no state).
     sr = build_levels(df, day, now)   # now = tz-aware "as of" time
     sr.labeled()                      # {"PDH": ..., "ORH": ..., "DH": ...}
     levels_line(sr)                   # "PDH 602.1 PDL 595.0 ..." (available families)
-    nearest_line(sr, price)           # "R 602.1 +0.14% | R 605.3 +0.67% | S 601.0 -0.04% ..."
+    nearest_line(sr, price)           # "R 602.1 (0.14%) | R 605.3 (0.67%) | S 601.0 (0.04%) ..."
     nearest_levels(sr, price)         # closest resistance above / support below
     distance_to_level(price, lvl)     # signed %-distance (neg = price below it)
 
@@ -80,12 +80,16 @@ class SessionExtremes:
 class SupportResistance:
     """All S/R candidates for one trading day, as of `now`.
 
-    resistance: unique candidates strictly above the reference price,
-                descending (nearest first). support: same, ascending.
-    Reference = previous day close. The close itself and the pivot P are
-    context, not directional levels. Families not yet available at `now`
-    (pre-market before 09:30, opening range before 10:00, day extremes
-    before 11:45) are None.
+    resistance: unique candidates strictly above the reference price (previous
+                day close), sorted DESCENDING (highest first).
+    support:    unique candidates strictly below it, sorted ASCENDING.
+    candidates: every level candidate (PDH, PDL, R1, S1 and any available
+                PM/OR/day high-low), ascending. nearest_levels() uses this
+                pool and splits it around the CURRENT price, not around the
+                reference close.
+    The close itself and the pivot P are context, not directional levels.
+    Families not yet available at `now` (pre-market before 09:30, opening
+    range before 10:00, day extremes before 11:45) are None.
     """
     day: dt_date
     asof: pd.Timestamp | None
@@ -96,6 +100,7 @@ class SupportResistance:
     pivot: float
     resistance: tuple[float, ...]
     support: tuple[float, ...]
+    candidates: tuple[float, ...] = ()
 
     def labeled(self) -> dict[str, float]:
         """Trader shorthand for every level family available at `asof`."""
@@ -206,19 +211,26 @@ def build_levels(df: pd.DataFrame, day: dt_date,
 
     resistance = tuple(sorted({round(v, 2) for v in res_candidates if v > ref}, reverse=True))
     support = tuple(sorted({round(v, 2) for v in sup_candidates if v < ref}))
+    candidates = tuple(sorted({round(v, 2) for v in res_candidates + sup_candidates}))
 
     return SupportResistance(
         day=day, asof=now_ts, previous_day=prev, premarket=premarket,
         opening_range=opening_range, day_extremes=day_extremes,
         pivot=piv["P"], resistance=resistance, support=support,
+        candidates=candidates,
     )
 
 
 def nearest_levels(sr: SupportResistance, price: float, n: int = 1) -> dict[str, list[float]]:
     """The `n` closest resistance levels above and support levels below
-    `price`, nearest first: {"resistance": [...], "support": [...]}."""
-    above = [lvl for lvl in sr.resistance if lvl > price][:n]
-    below = [lvl for lvl in sr.support if lvl < price][-n:][::-1]
+    `price`, nearest first: {"resistance": [...], "support": [...]}.
+
+    Splits ALL candidates around `price` itself, so a level that sits between
+    the previous close and the current price (e.g. the opening-range high
+    after a rally) is correctly offered as support/resistance."""
+    pool = sr.candidates or tuple(sorted(set(sr.resistance) | set(sr.support)))
+    above = [lvl for lvl in pool if lvl > price][:n]                 # ascending -> nearest first
+    below = [lvl for lvl in reversed(pool) if lvl < price][:n]       # descending -> nearest first
     return {"resistance": above, "support": below}
 
 
@@ -239,10 +251,12 @@ def levels_line(sr: SupportResistance) -> str:
 
 
 def nearest_line(sr: SupportResistance, price: float, n: int = 2) -> str:
-    """'R 602.1 +0.14% | R 605.3 +0.67% | S 601.0 -0.04% | S 599.2 -0.34%' --
+    """'R 602.1 (0.14%) | R 605.3 (0.67%) | S 601.0 (0.04%) | S 599.2 (0.34%)' --
     the `n` nearest resistances above and supports below `price` (default 2
-    each), with signed %-distance from the close."""
+    each), each with its distance from `price` in percent. R is always above
+    and S always below, so no sign is printed (a '+' in the text would be
+    turned into a space by the Telegram URL)."""
     near = nearest_levels(sr, price, n)
-    parts = [f"R {lvl:g} {distance_to_level(price, lvl):+.2f}%" for lvl in near["resistance"]]
-    parts += [f"S {lvl:g} {distance_to_level(price, lvl):+.2f}%" for lvl in near["support"]]
+    parts = [f"R {lvl:g} ({abs(distance_to_level(price, lvl)):.2f}%)" for lvl in near["resistance"]]
+    parts += [f"S {lvl:g} ({abs(distance_to_level(price, lvl)):.2f}%)" for lvl in near["support"]]
     return " | ".join(parts)

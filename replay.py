@@ -162,8 +162,8 @@ def replay_frame(
                 # each with its signed %-distance.
                 near = nearest_levels(sr, row["close"], 2)
                 for tag, lvls in (("R", near["resistance"]), ("S", near["support"])):
-                    for i, lvl in enumerate(lvls, start=1):
-                        col = f"near{tag}" if i == 1 else f"near{tag}{i}"
+                    for rank, lvl in enumerate(lvls, start=1):   # NOT `i`: that is the bar position
+                        col = f"near{tag}" if rank == 1 else f"near{tag}{rank}"
                         alert[col] = lvl
                         alert[f"{col}_pct"] = distance_to_level(row["close"], lvl)
             for h in horizons:

@@ -23,6 +23,12 @@ EASTERN = ZoneInfo("America/New_York")   # zoneinfo: no .localize() pitfalls
 # fallback if you lack "sip" access.
 FEEDS = ["sip", "boats"]
 
+# Alpaca plans without real-time SIP refuse any query that reaches the most
+# recent ~15 minutes ("subscription does not permit querying recent SIP data").
+# Alpaca requests are therefore capped at (now - ALPACA_END_LAG_MIN); the Yahoo
+# patch fills that gap in live runs. Set to 0 if your plan has real-time SIP.
+ALPACA_END_LAG_MIN = 16
+
 # Alpaca columns dropped on ingest. Volume is KEPT (needed for VWAP).
 ALPACA_DROP_COLUMNS = ["vwap", "trade_count"]
 

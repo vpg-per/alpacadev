@@ -254,10 +254,22 @@ def fetch_combined(
     after `end` are excluded, "forming" is judged against `end` instead of
     the wall clock, and the Yahoo patch is skipped (it only knows "now")."""
     symbol = symbol or config.SYMBOL
-    frames = [fetch_feed(client, f, start, symbol, timeframe, end) for f in feeds]
+
+    # Cap the Alpaca request so plans without real-time SIP don't get rejected.
+    # `end` itself stays the "as of" time used for the logic further down.
+    request_end = end
+    if config.ALPACA_END_LAG_MIN:
+        cap = now_eastern() - timedelta(minutes=config.ALPACA_END_LAG_MIN)
+        request_end = cap if end is None else min(end, cap)
+
+    frames = [fetch_feed(client, f, start, symbol, timeframe, request_end) for f in feeds]
     frames = [f for f in frames if f is not None]
     if not frames:
-        raise RuntimeError("No feeds returned data -- check your subscriptions and symbol.")
+        raise RuntimeError(
+            "No feeds returned data -- check your subscriptions and symbol. If the log says "
+            "'recent SIP data', your plan can't query the latest ~15 minutes: keep "
+            "config.ALPACA_END_LAG_MIN > 0, or replay a past day (--date)."
+        )
 
     combined = pd.concat(frames)
     combined = combined[~combined.index.duplicated(keep="first")].sort_index()
