@@ -74,5 +74,39 @@ HTF_CONFIRM = {
 #   {"5min": [("vwap", {})], "*": [("ema", {"periods": (50,)})]}
 EXTRA_INDICATORS: dict = {}
 
-# ---- Alert dedupe ----------------------------------------------------------
-STATE_FILE = ".alert_state.json"
+# ---- Alert state (what was already alerted) --------------------------------
+# GitHub Actions runners are discarded after each run, so the state must live
+# outside the runner. "auto" = Postgres when the DATABASE_URL env var is set
+# (e.g. your Neon database), otherwise the local JSON file below (own machine).
+# Force with "postgres" or "file".
+STATE_BACKEND = "auto"
+STATE_FILE = ".alert_state.json"         # file backend only
+STATE_TABLE = "alert_state"              # Postgres table (created automatically)
+STATE_KEY = "alpaca_alerts"              # row id: use another key per project/environment
+
+# ---- Level-touch alerts (levelAlerts.py) -----------------------------------
+# Alert when a bar's price path TOUCHES a level from levels.py. Runs inside
+# main.py on the 5m frame that was already fetched for the MACD analysis.
+LEVEL_ALERTS_ENABLED = True
+LEVEL_MAX_AGE_MIN = 10        # no saved state: only bars that closed within this many minutes
+LEVEL_CATCHUP_MIN = 30        # with saved state: also catch bars missed by skipped runs, up to this old
+LEVEL_REARM_MIN = 0           # 0 = each level alerts once per day per session; N = may alert again after N min
+LEVEL_MAX_ALERTS_PER_DAY = 12 # per symbol, all levels together
+
+# Sessions. A bar is judged by the session its START time falls in; sessions
+# that are disabled (or gaps between them) produce no level alerts.
+#   families : level names to watch in that session. Static levels only:
+#              PDH PDL PDC (previous day high/low/close), P R1 S1 (pivot),
+#              PMH PML (pre-market, from 09:30), ORH ORL (opening range, from 10:00),
+#              TDH TDL TDC (today's regular-session high/low/close, from 16:00).
+#              DH/DL (running day high/low) are dynamic and not supported.
+#   tol_pct  : a touch = the bar's price path comes within this % of the level.
+LEVEL_SESSIONS = [
+    {"name": "regular", "start": dt_time(9, 30), "end": dt_time(16, 0), "enabled": True,
+     "tol_pct": 0.03,
+     "families": ["PDH", "PDL", "PDC", "P", "R1", "S1", "PMH", "PML", "ORH", "ORL"]},
+    # Room to extend: set "enabled": True to also get after-hours alerts.
+    {"name": "after-hours", "start": dt_time(16, 0), "end": dt_time(20, 0), "enabled": False,
+     "tol_pct": 0.06,
+     "families": ["TDH", "TDL", "TDC", "PDH", "PDL", "PMH", "PML", "ORH", "ORL"]},
+]

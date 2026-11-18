@@ -17,11 +17,16 @@ Levels (levels.py) are attached to every alert, gated by the run time (ET):
 Only the 2 nearest resistances and 2 nearest supports around the current
 price are displayed (console log and Telegram message).
 
+Level-touch alerts (levelAlerts.py) use the 5m frame already fetched for the
+MACD analysis -- no extra data requests. When a closed bar's price path touches
+a level (PDH, PDL, PDC, P, R1, S1, PMH, PML, ORH, ORL; after-hours levels are
+available but disabled in config.LEVEL_SESSIONS) a line is added to the alert.
+Use --no-levels to switch them off for a run.
+
 When several symbols alert in the SAME run, they are combined into ONE
 Telegram message (one send_chart_alert call), one block per symbol.
 """
 import argparse
-import json
 import logging
 import sys
 
@@ -30,7 +35,9 @@ import pandas as pd
 import config
 from alertManager import AlertManager
 from dataAnalyzer import AnalysisResult, SignalAnalyzer
+from levelAlerts import LevelAlertSettings, check_levels, format_events
 from levels import SupportResistance, build_levels, nearest_line
+from stateStore import get_store
 
 log = logging.getLogger("main")
 LABEL = {"Up": "Bullish", "Down": "Bearish"}
@@ -71,6 +78,8 @@ def parse_args(argv=None):
     parser.add_argument("--end", type=parse_as_of, default=None, metavar="DATETIME",
                         help="Debug: analyze as of this US/Eastern date-time, e.g. \"2026-11-13 11:45\". "
                              "Implies --dry-run.")
+    parser.add_argument("--no-levels", action="store_true",
+                        help="Skip level-touch alerts (MACD alerts only).")
     parser.add_argument("--dry-run", action="store_true",
                         help="Analyze and print, but don't send alerts or record state.")
     args = parser.parse_args(argv)
@@ -97,21 +106,7 @@ def print_tail(result: AnalysisResult, n: int, rules: list[str] | None = None) -
 
 
 # ---- alert de-duplication (one alert per symbol/bar/direction) -------------
-def load_state(path: str) -> dict:
-    try:
-        with open(path) as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return {}
-
-
-def save_state(path: str, state: dict) -> None:
-    try:
-        with open(path, "w") as f:
-            json.dump(state, f)
-    except OSError as e:
-        log.warning("Could not write state file %s: %s", path, e)
-
+# State is kept by stateStore.py (Postgres when DATABASE_URL is set, else a local file).
 
 def signal_key(result: AnalysisResult) -> str:
     row = result.signal_row
@@ -175,7 +170,7 @@ def default_analyzer() -> SignalAnalyzer:
     )
 
 
-def main(argv=None, analyzer: SignalAnalyzer | None = None) -> int:
+def main(argv=None, analyzer: SignalAnalyzer | None = None, now: pd.Timestamp | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     args = parse_args(argv)
     log.info("Symbols: %s", ", ".join(args.symbols))
@@ -183,10 +178,23 @@ def main(argv=None, analyzer: SignalAnalyzer | None = None) -> int:
         log.info("DEBUG as-of %s -- dry run: no alerts, no state", f"{args.end:%Y-%m-%d %H:%M %Z}")
 
     analyzer = analyzer or default_analyzer()
-    state = load_state(config.STATE_FILE)
-    pending = []  # (symbol, key, message)
     failures = 0
-    now = args.end or pd.Timestamp.now(tz=config.EASTERN)
+
+    # Alert state: not needed (and never touched) in a dry run / --end debug run.
+    store, state = None, {}
+    if not args.dry_run:
+        try:
+            store = get_store()
+            state = store.load()
+        except Exception:
+            failures += 1
+            log.exception("Could not load alert state; continuing with an empty state "
+                          "(already-sent alerts may repeat)")
+    pending = []        # MACD alerts: (symbol, key, message)
+    level_pending = []  # level-touch alerts: (symbol, "levels", message)
+    level_updates = {}  # symbol -> new level state, committed only once the run succeeded
+    level_settings = LevelAlertSettings(enabled=config.LEVEL_ALERTS_ENABLED and not args.no_levels)
+    now = args.end or now or pd.Timestamp.now(tz=config.EASTERN)   # `now` arg: test hook
 
     for sym in args.symbols:
         try:
@@ -208,6 +216,23 @@ def main(argv=None, analyzer: SignalAnalyzer | None = None) -> int:
             log.info("%s (%.2f) Nearest R/S: %s", sym, last_close,
                      nearest_line(sr, last_close))
 
+        # Level-touch alerts on the SAME 5m frame (no extra requests). A dry run
+        # ignores saved state so you can always see what would alert.
+        if level_settings.enabled and sr is not None:
+            try:
+                lvl_state = None if args.dry_run else state.get("_levels", {}).get(sym)
+                events, level_updates[sym] = check_levels(
+                    sym, result.frames[config.BASE_RULE], sr, now, lvl_state, level_settings)
+            except Exception:
+                events = []
+                log.exception("Level check failed for %s", sym)
+            if events:
+                lvl_msg = format_events(sym, events)
+                log.info("%s%s", "[dry-run, would alert] " if args.dry_run else "", lvl_msg)
+                level_pending.append((sym, "levels", lvl_msg))
+            else:
+                log.info("No level touches for %s", sym)
+
         if not result.has_signal:
             log.info("No alert for %s: %s", sym, result.reason)
             continue
@@ -221,17 +246,30 @@ def main(argv=None, analyzer: SignalAnalyzer | None = None) -> int:
         log.info("%s%s", "[dry-run, would alert] " if args.dry_run else "", msg)
         pending.append((sym, key, msg))
 
-    # One Telegram message for ALL symbols that alerted in this run.
-    if pending and not args.dry_run:
+    # One Telegram message for ALL alerts (MACD + level touches, all symbols).
+    messages = pending + level_pending
+    sent_ok = True
+    if messages and not args.dry_run:
         try:
-            AlertManager().send_chart_alert(combine_messages(pending))
+            AlertManager().send_chart_alert(combine_messages(messages))
         except Exception:
             failures += 1
+            sent_ok = False
             log.exception("Alert delivery failed; will retry on next run")
         else:
             for sym, key, _ in pending:
                 state[sym] = key
-            save_state(config.STATE_FILE, state)
+
+    # Commit state only if delivery worked (or there was nothing to deliver),
+    # so a failed send is retried on the next run.
+    if store is not None and sent_ok and (messages or level_updates):
+        if level_updates:
+            state.setdefault("_levels", {}).update(level_updates)
+        try:
+            store.save(state)
+        except Exception:
+            failures += 1
+            log.exception("Could not save alert state; the next run may repeat these alerts")
 
     return 1 if failures else 0
 
